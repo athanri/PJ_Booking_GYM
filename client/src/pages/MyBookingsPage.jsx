@@ -204,7 +204,7 @@ export default function MyBookingsPage() {
         <div className="grid gap-3">
           {filtered.map((b) => {
             // title/price support both listing (stays) and session (classes)
-            const title = b.session?.template?.name || 'Booking';
+            const title = b.session?.template?.name || 'Classes';
             const nightly = b.session?.price ?? 0;
             const nights = diffNights(b.start, b.end);
             const subtotal = nights * nightly;

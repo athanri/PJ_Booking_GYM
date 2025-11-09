@@ -2,6 +2,7 @@ import { Router } from 'express';
 import mongoose from 'mongoose';
 import ClassTemplate from '../models/ClassTemplate.js';
 import ClassSession from '../models/ClassSession.js';
+import { windowFor } from '../utils/bookingWindow.js';
 
 const router = Router();
 
@@ -96,23 +97,28 @@ router.get('/sessions', async (req, res) => {
     .sort({ start: 1 });
 
   // compute remaining
-  const mapped = sessions.map(s => ({
-    _id: s._id,
-    start: s.start,
-    end: s.end,
-    capacity: s.capacity,
-    price: s.price,
-    status: s.status,
-    template: {
-      _id: s.template?._id,
-      name: s.template?.name,
-      instructor: s.template?.instructor,
-      location: s.template?.location,
-      durationMins: s.template?.durationMins,
-    },
-    spotsRemaining: Math.max(0, s.capacity - s.spotsTaken),
-  }));
-
+  const mapped = sessions.map(s => {
+    const { openAt, closeAt, bookable } = windowFor(new Date(s.start));
+    return {
+      _id: s._id,
+      start: s.start,
+      end: s.end,
+      capacity: s.capacity,
+      price: s.price,
+      status: s.status,
+      template: {
+        _id: s.template?._id,
+        name: s.template?.name,
+        instructor: s.template?.instructor,
+        location: s.template?.location,
+        durationMins: s.template?.durationMins,
+      },
+      spotsRemaining: Math.max(0, s.capacity - s.spotsTaken),
+      bookable,
+      openAt,
+      closeAt,
+    };
+  });
   res.json(mapped);
 });
 

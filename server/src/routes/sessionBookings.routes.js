@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import ClassSession from '../models/ClassSession.js';
 import Booking from '../models/Booking.js';
 import { requireAuth } from '../middleware/auth.js';
+import { windowFor } from '../utils/bookingWindow.js';
 
 const router = Router();
 
@@ -15,6 +16,22 @@ const router = Router();
  */
 router.post('/', requireAuth, async (req, res) => {
   const { sessionId } = req.body;
+
+  const sessionDoc = await ClassSession.findById(sessionId);
+  if (!sessionDoc || sessionDoc.status !== 'scheduled') {
+    return res.status(404).json({ message: 'Session not found' });
+  }
+
+  
+  // window enforcement
+  const { bookable, openAt, closeAt } = windowFor(new Date(sessionDoc.start));
+  if (!bookable) {
+    return res.status(403).json({
+      message: `Booking window is ${openAt.toISOString()} → ${closeAt.toISOString()}`,
+      reason: new Date() < openAt ? 'not_open' : 'closed'
+    });
+  }
+
   if (!mongoose.Types.ObjectId.isValid(sessionId)) {
     return res.status(400).json({ message: 'Invalid session id' });
   }
