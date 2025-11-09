@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import mongoose from 'mongoose';
 import Listing from '../models/Listing.js';
 import Booking from '../models/Booking.js';   
 import { parseISO, eachDayUTC, ymd } from '../utils/dates.js';
@@ -12,6 +13,7 @@ router.post('/seed', async (_, res) => {
         { title: 'Cozy Studio', description: 'City center', price: 80, capacity: 2, location: 'Dublin' },
         { title: 'Beach House', description: 'Sea view', price: 220, capacity: 6, location: 'Galway' }
     ];
+    await Booking.deleteMany({});
     await Listing.deleteMany({});
     const out = await Listing.insertMany(data);
     res.json(out);
@@ -30,24 +32,18 @@ router.get('/:id', async (req, res) => {
 
 // GET /api/listings/:id/availability?start=YYYY-MM-DD&end=YYYY-MM-DD (end exclusive)
 router.get('/:id/availability', async (req, res) => {
-    const { id } = req.params;
-    const { start, end } = req.query;
+    const { id } = req.params; const { start, end } = req.query;
+    if (!mongoose.Types.ObjectId.isValid(id)) return res.status(400).json({ message: 'Invalid listing id' });
     if (!start || !end) return res.status(400).json({ message: 'start and end are required' });
 
     const listing = await Listing.findById(id);
     if (!listing) return res.status(404).json({ message: 'Listing not found' });
-
-    const s = parseISO(start);
-    const e = parseISO(end);
+    const s = parseISO(start), e = parseISO(end);
     if (isNaN(s) || isNaN(e) || s >= e) return res.status(400).json({ message: 'Invalid dates' });
 
-
-    const bookings = await Booking.find({
-        listing: id,
-        status: { $ne: 'cancelled' },
-        start: { $lt: e },
-        end: { $gt: s }
-    }).select('start end');
+    const bookings = await Booking.find(
+        { listing: id, status: { $ne: 'cancelled' }, start: { $lt: e }, end: { $gt: s } }
+    ).select('start end');
 
     const counts = new Map();
     for (const b of bookings) {
@@ -56,14 +52,18 @@ router.get('/:id/availability', async (req, res) => {
             counts.set(key, (counts.get(key) || 0) + 1);
         }
     }
+
     const result = {};
     for (const d of eachDayUTC(s, e)) {
-        const key = ymd(d);
-        const used = counts.get(key) || 0;
-        result[key] = Math.max(0, (listing.capacity || 1) - used);
+    const key = ymd(d);
+    const used = counts.get(key) || 0;
+    result[key] = Math.max(0, (listing.capacity || 1) - used);
     }
 
-    res.json({ capacity: listing.capacity || 1, days: result });
+    // add blackout info
+    const blackout = (listing.blackoutDates || []).map((d) => ymd(new Date(d)));
+
+    res.json({ capacity: listing.capacity || 1, minStay: listing.minStay || 1, blackoutDays: blackout, days: result });
 });
 
 // simple create/update for admins could be added later

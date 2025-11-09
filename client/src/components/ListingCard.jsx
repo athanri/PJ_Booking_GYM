@@ -15,10 +15,12 @@ export default function ListingCard({ listing }) {
     const start = firstDayMonthStr(month);
     const end = firstDayMonthStr(nextMonth(month));
     const { data: avail } = useGetAvailabilityQuery({ listingId: listing._id, start, end });
-
+    const minStay = avail?.minStay || 1;
 
     const handleBook = async () => {
         if (!range.start || !range.end) return alert('Pick dates');
+        const nights = Math.ceil((new Date(range.end) - new Date(range.start)) / (1000*60*60*24));
+        if (nights < minStay) return alert(`Minimum stay is ${minStay} night(s).`);
         try {
             await createBooking({ listingId: listing._id, start: range.start, end: range.end }).unwrap();
             alert('Booked!');
@@ -27,10 +29,10 @@ export default function ListingCard({ listing }) {
         }
     };
 
-
     return (
         <li style={{ border: '1px solid #ddd', padding: 16, marginBottom: 16 }}>
             <h3>{listing.title} — €{listing.price}/night (cap {listing.capacity})</h3>
+            <div style={{ marginBottom: 8, opacity: 0.8 }}>Minimum stay: {minStay} night(s)</div>
             <p>{listing.description}</p>
 
 
@@ -52,7 +54,7 @@ export default function ListingCard({ listing }) {
                         monthDate={month}
                         data={avail}
                         onSelectDay={(ymd) => {
-                        setRange((r)=> r.start ? { ...r, end: ymd } : { ...r, start: ymd });
+                            setRange((r)=> r.start ? { ...r, end: ymd } : { ...r, start: ymd });
                         }}
                     />
                 </div>

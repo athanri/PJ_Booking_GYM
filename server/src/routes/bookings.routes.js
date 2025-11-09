@@ -47,53 +47,35 @@ async function getRemainingByDay(listing, start, end) {
  */
 router.post('/', requireAuth, async (req, res) => {
   const { listingId, start, end } = req.body;
-
-  if (!mongoose.Types.ObjectId.isValid(listingId)) {
-    return res.status(400).json({ message: 'Invalid listing id' });
-  }
+  if (!mongoose.Types.ObjectId.isValid(listingId)) return res.status(400).json({ message: 'Invalid listing id' });
 
   const listing = await Listing.findById(listingId);
   if (!listing) return res.status(404).json({ message: 'Listing not found' });
 
-  const s = parseISO(start);
-  const e = parseISO(end);
-  if (isNaN(s) || isNaN(e) || s >= e) {
-    return res.status(400).json({ message: 'Invalid dates' });
-  }
+  const s = parseISO(start), e = parseISO(end);
+  if (isNaN(s) || isNaN(e) || s >= e) return res.status(400).json({ message: 'Invalid dates' });
 
-  // Optional: block overlapping bookings by the same user on the same listing
-  const existing = await Booking.findOne({
-    user: req.user.id,
-    listing: listingId,
-    start: { $lt: e },
-    end: { $gt: s },
-    status: { $ne: 'cancelled' }
-  });
-  if (existing) {
-    return res
-      .status(409)
-      .json({ message: 'You already have a booking overlapping these dates for this listing.' });
-  }
+  // minimum stay
+  const nights = Math.ceil((e - s) / (1000 * 60 * 60 * 24));
+  const minStay = listing.minStay || 1;
+  if (nights < minStay) return res.status(400).json({ message: `Minimum stay is ${minStay} night(s).` });
 
-  // Enforce capacity per day across [start, end)
+  // blackout overlap: if any day intersects, reject
+  const blackoutSet = new Set((listing.blackoutDates || []).map((d) => ymd(new Date(d))));
+  const intersectsBlackout = eachDayUTC(s, e).some((d) => blackoutSet.has(ymd(d)));
+  if (intersectsBlackout) return res.status(409).json({ message: 'Selected dates include a blackout date.' });
+
+  // same-user overlap guard
+  const existing = await Booking.findOne({ user: req.user.id, listing: listingId, start: { $lt: e }, end: { $gt: s }, status: { $ne: 'cancelled' } });
+  if (existing) return res.status(409).json({ message: 'You already have a booking overlapping these dates for this listing.' });
+
+  // capacity check
   const remaining = await getRemainingByDay(listing, s, e);
   const soldOutDay = Object.entries(remaining).find(([, rem]) => rem <= 0);
-  if (soldOutDay) {
-    return res.status(409).json({ message: `Sold out on ${soldOutDay[0]}` });
-  }
+  if (soldOutDay) return res.status(409).json({ message: `Sold out on ${soldOutDay[0]}` });
 
-  const nights = Math.ceil((e - s) / (1000 * 60 * 60 * 24));
   const total = nights * listing.price;
-
-  const booking = await Booking.create({
-    user: req.user.id,
-    listing: listingId,
-    start: s,
-    end: e,
-    total,
-    status: 'confirmed'
-  });
-
+  const booking = await Booking.create({ user: req.user.id, listing: listingId, start: s, end: e, total, status: 'confirmed' });
   res.status(201).json(await booking.populate('listing'));
 });
 
