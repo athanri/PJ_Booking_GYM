@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useCreateBookingMutation } from '../features/bookings/bookingsApi';
 import { useGetAvailabilityQuery } from '../features/availability/availabilityApi';
-import { useToast } from '../hooks/use-toast.js';
+import { useToast } from './ui/use-toast.js';
 import AvailabilityCalendar from './AvailabilityCalendar.jsx';
 
 function firstDayMonthStr(date) { return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-01`; }

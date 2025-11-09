@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useToast } from '../hooks/use-toast.js';
+import { useToast } from '../components/ui/use-toast.js';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,6 +29,8 @@ import {
   SheetFooter,
   SheetClose,
 } from '@/components/ui/sheet';
+import { downloadBookingReceipt } from '@/lib/receipt';
+import { useSelector } from 'react-redux';
 
 function formatDate(d) {
   try {
@@ -67,6 +69,8 @@ export default function MyBookingsPage() {
   const [q, setQ] = useState('');
   const [status, setStatus] = useState('all'); // all | confirmed | pending | cancelled
   const [when, setWhen] = useState('upcoming'); // upcoming | past | all
+
+  const user = useSelector((s) => s.auth.user);
 
   const filtered = useMemo(() => {
     const now = Date.now();
@@ -241,6 +245,12 @@ export default function MyBookingsPage() {
                           <SheetClose asChild>
                             <Button variant="outline">Close</Button>
                           </SheetClose>
+                          <Button
+                            variant="secondary"
+                            onClick={() => downloadBookingReceipt({ booking: b, user })}
+                          >
+                            Download receipt (PDF)
+                          </Button>
                           {canCancel(b) && (
                             <Button variant="destructive" onClick={() => handleCancel(b)}>
                               Cancel booking
