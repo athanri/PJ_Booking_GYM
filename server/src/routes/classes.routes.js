@@ -13,7 +13,7 @@ router.post('/seed', async (_req, res) => {
   const data = await ClassTemplate.insertMany([
     {
       name: 'Spin 45', instructor: 'Ava', location: 'Studio A',
-      durationMins: 45, capacity: 18, price: 10,
+      durationMins: 45, capacity: 20, price: 10,
       recurDays: [1,3,5], startTime: '18:00', blackoutDates: []
     },
     {

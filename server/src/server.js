@@ -6,6 +6,7 @@ import authRoutes from './routes/auth.routes.js';
 import listingsRoutes from './routes/listings.routes.js';
 import bookingsRoutes from './routes/bookings.routes.js';
 import classesRoutes from './routes/classes.routes.js';
+import waitlistRoutes from './routes/waitlist.routes.js';
 import sessionBookingsRoutes from './routes/sessionBookings.routes.js';
 
 const app = express();
@@ -19,6 +20,7 @@ app.get('/', (_, res) => res.json({ ok: true, service: 'booking-api' }));
 app.use('/api/auth', authRoutes);
 app.use('/api/listings', listingsRoutes);
 app.use('/api/bookings', bookingsRoutes);
+app.use('/api/waitlist', waitlistRoutes);
 
 mongoose.connect(MONGO_URI).then(() => {
     app.listen(PORT, () => console.log(`API running on http://localhost:${PORT}`));

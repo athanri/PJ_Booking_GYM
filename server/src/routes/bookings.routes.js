@@ -3,6 +3,8 @@ import { Router } from 'express';
 import mongoose from 'mongoose';
 import Booking from '../models/Booking.js';
 import Listing from '../models/Listing.js';
+import Waitlist from '../models/Waitlist.js';
+import ClassSession from '../models/ClassSession.js';
 import { requireAuth } from '../middleware/auth.js';
 import { parseISO, eachDayUTC, ymd } from '../utils/dates.js';
 
@@ -36,6 +38,37 @@ async function getRemainingByDay(listing, start, end) {
     result[key] = Math.max(0, (listing.capacity || 1) - used);
   }
   return result;
+}
+
+// Try to promote one user from waitlist into a freed spot
+async function promoteFromWaitlist(sessionId) {
+  // take oldest waitlist entry atomically
+  const entry = await Waitlist.findOneAndDelete({ session: sessionId }).sort({ createdAt: 1 });
+  if (!entry) return;
+
+  // claim spot
+  const session = await ClassSession.findOneAndUpdate(
+    { _id: sessionId, status: 'scheduled', $expr: { $lt: ['$spotsTaken', '$capacity'] } },
+    { $inc: { spotsTaken: 1 } },
+    { new: true }
+  ).populate('template');
+
+  if (!session) {
+    // Could not claim (race condition). Put the user back on waitlist best-effort.
+    try { await Waitlist.create({ session: sessionId, user: entry.user }); } catch (_) {}
+    return;
+  }
+
+  // Create booking on their behalf
+  const Booking = (await import('../models/Booking.js')).default;
+  await Booking.create({
+    user: entry.user,
+    session: session._id,
+    start: session.start,
+    end: session.end,
+    total: session.price,
+    status: 'confirmed',
+  });
 }
 
 /**
@@ -108,6 +141,18 @@ router.patch('/:id/cancel', requireAuth, async (req, res) => {
 
 
   booking.status = 'cancelled';
+
+  // inside PATCH /api/bookings/:id/cancel, after booking.status='cancelled' and save()
+  if (booking.session) {
+    // free a spot in session
+    await ClassSession.updateOne(
+      { _id: booking.session, spotsTaken: { $gt: 0 } },
+      { $inc: { spotsTaken: -1 } }
+    );
+    // try promote waitlist
+    promoteFromWaitlist(booking.session).catch(() => {});
+  }
+  
   await booking.save();
   res.json(booking);
 });

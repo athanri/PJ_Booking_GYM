@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useGetSessionsQuery } from '../features/sessions/sessionsApi';
-import { useCreateSessionBookingMutation } from '../features/bookings/bookingsApi';
+import { useCreateSessionBookingMutation, useJoinWaitlistMutation  } from '../features/bookings/bookingsApi';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
@@ -34,6 +34,7 @@ export default function SessionsPage() {
   });
 
   const [book] = useCreateSessionBookingMutation();
+  const [joinWaitlist] = useJoinWaitlistMutation();
   const { toast } = useToast();
 
   const groups = useMemo(() => {
@@ -99,22 +100,27 @@ export default function SessionsPage() {
                     </div>
                     <Button
                       size="sm"
-                      disabled={s.spotsRemaining <= 0}
+                      disabled={s.spotsRemaining <= 0 ? false : false}
                       onClick={async () => {
                         try {
-                          await book({ sessionId: s._id }).unwrap();
-                          toast({ title: 'Booked!', description: `${s.template?.name} ${fmtTime(s.start)}` });
+                          if (s.spotsRemaining > 0) {
+                            await book({ sessionId: s._id }).unwrap();
+                            toast({ title: 'Booked!', description: `${s.template?.name} ${fmtTime(s.start)}` });
+                          } else {
+                            await joinWaitlist({ sessionId: s._id }).unwrap();
+                            toast({ title: 'Joined waitlist', description: `${s.template?.name} ${fmtTime(s.start)}` });
+                          }
                           refetch();
                         } catch (e) {
                           toast({
                             variant: 'destructive',
-                            title: 'Could not book',
+                            title: s.spotsRemaining > 0 ? 'Could not book' : 'Waitlist failed',
                             description: e?.data?.message || 'Try again',
                           });
                         }
                       }}
                     >
-                      {s.spotsRemaining > 0 ? 'Book' : 'Full'}
+                      {s.spotsRemaining > 0 ? 'Book' : 'Join waitlist'}
                     </Button>
                   </div>
                 ))}

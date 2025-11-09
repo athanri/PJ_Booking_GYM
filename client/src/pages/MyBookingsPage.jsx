@@ -1,5 +1,10 @@
 import { useMemo, useState } from 'react';
-import { useGetMyBookingsQuery, useCancelBookingMutation } from '../features/bookings/bookingsApi';
+import { useSelector } from 'react-redux';
+import {
+  useGetMyBookingsQuery,
+  useCancelBookingMutation,
+} from '../features/bookings/bookingsApi';
+
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
@@ -7,7 +12,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useToast } from '../components/ui/use-toast.js';
+import { useToast } from '@/components/ui/use-toast';
+
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,6 +25,7 @@ import {
   AlertDialogDescription,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+
 import {
   Sheet,
   SheetContent,
@@ -29,8 +36,8 @@ import {
   SheetFooter,
   SheetClose,
 } from '@/components/ui/sheet';
+
 import { downloadBookingReceipt } from '@/lib/receipt';
-import { useSelector } from 'react-redux';
 
 function formatDate(d) {
   try {
@@ -47,7 +54,6 @@ function diffNights(a, b) {
     return 0;
   }
 }
-
 function StatusBadge({ status }) {
   const map = {
     confirmed: 'default',
@@ -62,6 +68,7 @@ function StatusBadge({ status }) {
 }
 
 export default function MyBookingsPage() {
+  const user = useSelector((s) => s.auth.user);
   const { data = [], isLoading, error, refetch, isFetching } = useGetMyBookingsQuery();
   const [cancelBooking] = useCancelBookingMutation();
   const { toast } = useToast();
@@ -70,18 +77,23 @@ export default function MyBookingsPage() {
   const [status, setStatus] = useState('all'); // all | confirmed | pending | cancelled
   const [when, setWhen] = useState('upcoming'); // upcoming | past | all
 
-  const user = useSelector((s) => s.auth.user);
-
   const filtered = useMemo(() => {
     const now = Date.now();
     return [...(data || [])]
       .filter((b) => {
-        const title = (b.listing?.title || '').toLowerCase();
+        // support both listing-based and session-based bookings
+        const title =
+          (b.listing?.title ||
+            b.session?.template?.name ||
+            'Booking').toLowerCase();
+
         if (q && !title.includes(q.toLowerCase())) return false;
         if (status !== 'all' && b.status !== status) return false;
+
         const startMs = b.start ? new Date(b.start).getTime() : 0;
         if (when === 'upcoming' && startMs < now) return false;
         if (when === 'past' && startMs >= now) return false;
+
         return true;
       })
       .sort((a, b) => new Date(b.start) - new Date(a.start));
@@ -94,11 +106,25 @@ export default function MyBookingsPage() {
     try {
       await cancelBooking(b._id).unwrap();
       toast({ title: 'Booking cancelled' });
+      refetch();
     } catch (e) {
       toast({
         variant: 'destructive',
         title: 'Failed to cancel',
         description: e?.data?.message || 'Try again.',
+      });
+    }
+  };
+
+  const handleDownload = (b) => {
+    try {
+      downloadBookingReceipt({ booking: b, user });
+      toast({ title: 'Receipt downloaded' });
+    } catch {
+      toast({
+        variant: 'destructive',
+        title: 'Could not generate receipt',
+        description: 'Please try again.',
       });
     }
   };
@@ -131,7 +157,7 @@ export default function MyBookingsPage() {
             <Label htmlFor="search">Search</Label>
             <Input
               id="search"
-              placeholder="Search by listing title…"
+              placeholder="Search by title…"
               value={q}
               onChange={(e) => setQ(e.target.value)}
             />
@@ -171,13 +197,17 @@ export default function MyBookingsPage() {
 
       {!filtered.length ? (
         <Card>
-          <CardContent className="p-6 text-center opacity-80">No bookings found.</CardContent>
+          <CardContent className="p-6 text-center opacity-80">
+            No bookings found.
+          </CardContent>
         </Card>
       ) : (
         <div className="grid gap-3">
           {filtered.map((b) => {
+            // title/price support both listing (stays) and session (classes)
+            const title = b.listing?.title || b.session?.template?.name || 'Booking';
+            const nightly = b.listing?.price ?? b.session?.price ?? 0;
             const nights = diffNights(b.start, b.end);
-            const nightly = b.listing?.price ?? 0;
             const subtotal = nights * nightly;
             const total = b.total ?? subtotal;
 
@@ -185,47 +215,67 @@ export default function MyBookingsPage() {
               <Card key={b._id}>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base flex items-center gap-2">
-                    <span>{b.listing?.title ?? 'Listing unavailable'}</span>
+                    <span>{title}</span>
                     <StatusBadge status={b.status} />
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="pt-0">
                   <div className="text-sm opacity-80">
-                    {formatDate(b.start)} → {formatDate(b.end)} ({nights} night{nights === 1 ? '' : 's'})
+                    {formatDate(b.start)} → {formatDate(b.end)}
+                    {Number.isFinite(nights) && nights > 0
+                      ? ` (${nights} night${nights === 1 ? '' : 's'})`
+                      : null}
                   </div>
                   <div className="text-sm mb-3">
-                    Total: €{total} {nightly ? <span className="opacity-70">({nights} × €{nightly})</span> : null}
+                    Total: €{total}{' '}
+                    {nightly && nights ? (
+                      <span className="opacity-70">({nights} × €{nightly})</span>
+                    ) : null}
                   </div>
 
                   <div className="flex flex-wrap gap-2">
+                    {/* View details drawer */}
                     <Sheet>
                       <SheetTrigger asChild>
-                        <Button size="sm" variant="secondary">View details</Button>
+                        <Button size="sm" variant="secondary">
+                          View details
+                        </Button>
                       </SheetTrigger>
                       <SheetContent className="sm:max-w-md">
                         <SheetHeader>
-                          <SheetTitle>{b.listing?.title ?? 'Booking details'}</SheetTitle>
+                          <SheetTitle>{title}</SheetTitle>
                           <SheetDescription>
-                            {formatDate(b.start)} → {formatDate(b.end)} ({nights} night{nights === 1 ? '' : 's'})
+                            {formatDate(b.start)} → {formatDate(b.end)}
+                            {Number.isFinite(nights) && nights > 0
+                              ? ` (${nights} night${nights === 1 ? '' : 's'})`
+                              : null}
                           </SheetDescription>
                         </SheetHeader>
 
                         <div className="mt-4 space-y-2 text-sm">
                           <div className="flex justify-between">
                             <span className="opacity-70">Location</span>
-                            <span>{b.listing?.location ?? '—'}</span>
+                            <span>
+                              {b.listing?.location ||
+                                b.session?.template?.location ||
+                                '—'}
+                            </span>
                           </div>
                           <div className="flex justify-between">
                             <span className="opacity-70">Capacity</span>
-                            <span>{b.listing?.capacity ?? '—'}</span>
+                            <span>
+                              {b.listing?.capacity ||
+                                b.session?.template?.capacity ||
+                                '—'}
+                            </span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="opacity-70">Nightly price</span>
+                            <span className="opacity-70">Unit price</span>
                             <span>€{nightly}</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="opacity-70">Subtotal</span>
-                            <span>€{subtotal}</span>
+                            <span>€{subtotal || total}</span>
                           </div>
                           <div className="flex justify-between font-medium pt-2 border-t">
                             <span>Total</span>
@@ -247,12 +297,15 @@ export default function MyBookingsPage() {
                           </SheetClose>
                           <Button
                             variant="secondary"
-                            onClick={() => downloadBookingReceipt({ booking: b, user })}
+                            onClick={() => handleDownload(b)}
                           >
                             Download receipt (PDF)
                           </Button>
                           {canCancel(b) && (
-                            <Button variant="destructive" onClick={() => handleCancel(b)}>
+                            <Button
+                              variant="destructive"
+                              onClick={() => handleCancel(b)}
+                            >
                               Cancel booking
                             </Button>
                           )}
@@ -260,6 +313,7 @@ export default function MyBookingsPage() {
                       </SheetContent>
                     </Sheet>
 
+                    {/* Quick cancel button (with confirm dialog) */}
                     {canCancel(b) && (
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
@@ -271,7 +325,7 @@ export default function MyBookingsPage() {
                           <AlertDialogHeader>
                             <AlertDialogTitle>Cancel this booking?</AlertDialogTitle>
                             <AlertDialogDescription>
-                              {b.listing?.title} — {formatDate(b.start)} → {formatDate(b.end)}
+                              {title} — {formatDate(b.start)} → {formatDate(b.end)}
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
