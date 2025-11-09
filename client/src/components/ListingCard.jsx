@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useCreateBookingMutation } from '../features/bookings/bookingsApi';
 import { useGetAvailabilityQuery } from '../features/availability/availabilityApi';
+import { useToast } from '../hooks/use-toast.js';
 import AvailabilityCalendar from './AvailabilityCalendar.jsx';
 
 function firstDayMonthStr(date) { return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-01`; }
@@ -11,6 +12,7 @@ export default function ListingCard({ listing }) {
     const [month, setMonth] = useState(new Date());
     const [range, setRange] = useState({ start: '', end: '' });
 
+    const { toast } = useToast();
 
     const start = firstDayMonthStr(month);
     const end = firstDayMonthStr(nextMonth(month));
@@ -23,9 +25,9 @@ export default function ListingCard({ listing }) {
         if (nights < minStay) return alert(`Minimum stay is ${minStay} night(s).`);
         try {
             await createBooking({ listingId: listing._id, start: range.start, end: range.end }).unwrap();
-            alert('Booked!');
+            toast({ title: 'Booked!', description: `${range.start} → ${range.end}` });
         } catch (err) {
-            alert(err?.data?.message || 'Booking failed');
+            toast({ variant: 'destructive', title: 'Booking failed', description: err?.data?.message || 'Try again.' });
         }
     };
 

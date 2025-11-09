@@ -1,26 +1,31 @@
-import React from "react";
-import { useSelector, useDispatch } from 'react-redux';
 import { Link } from 'react-router-dom';
+import { useSelector, useDispatch } from 'react-redux';
+import { Button } from '@/components/ui/button';
 import { logout } from '../features/auth/authSlice';
+
 
 export default function Navbar() {
     const { user } = useSelector((s) => s.auth);
     const dispatch = useDispatch();
     return (
-        <nav style={{ display: 'flex', gap: 12, padding: 12, borderBottom: '1px solid #eee' }}>
-            <Link to="/">Listings</Link>
-            {user ? (
-                <>
-                    <Link to="/me/bookings">My Bookings</Link>
-                    <span style={{ marginLeft: 'auto' }}>Hi, {user.name}</span>
-                    <button onClick={()=>dispatch(logout())}>Logout</button>
-                </>
-            ) : (
-                <>
-                    <Link to="/login">Login</Link>
-                    <Link to="/register">Register</Link>
-                </>
-            )}
-        </nav>
+        <header className="border-b bg-background">
+            <div className="container flex items-center gap-3 py-3">
+                <Link to="/" className="font-semibold">Bookings</Link>
+                <nav className="ml-auto flex items-center gap-2">
+                    {user ? (
+                    <>
+                        <Link to="/me/bookings" className="text-sm">My Bookings</Link>
+                        <span className="text-sm opacity-70">Hi, {user.name}</span>
+                        <Button variant="outline" size="sm" onClick={()=>dispatch(logout())}>Logout</Button>
+                    </>
+                    ) : (
+                    <>
+                        <Button asChild variant="ghost" size="sm"><Link to="/login">Login</Link></Button>
+                        <Button asChild size="sm"><Link to="/register">Register</Link></Button>
+                    </>
+                    )}
+                </nav>
+            </div>
+        </header>
     );
 }
