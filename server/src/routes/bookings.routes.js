@@ -90,4 +90,25 @@ router.get('/me', requireAuth, async (req, res) => {
   res.json(items);
 });
 
+// PATCH /api/bookings/:id/cancel — user can cancel their own upcoming booking
+router.patch('/:id/cancel', requireAuth, async (req, res) => {
+  const { id } = req.params;
+  if (!mongoose.Types.ObjectId.isValid(id)) return res.status(400).json({ message: 'Invalid booking id' });
+
+
+  const booking = await Booking.findById(id).populate('listing');
+  if (!booking) return res.status(404).json({ message: 'Booking not found' });
+  if (String(booking.user) !== String(req.user.id)) return res.status(403).json({ message: 'Not allowed' });
+  if (booking.status === 'cancelled') return res.status(409).json({ message: 'Already cancelled' });
+
+
+  // optionally disallow cancelling past bookings
+  if (new Date(booking.start) <= new Date()) return res.status(400).json({ message: 'Cannot cancel past or ongoing bookings.' });
+
+
+  booking.status = 'cancelled';
+  await booking.save();
+  res.json(booking);
+});
+
 export default router;

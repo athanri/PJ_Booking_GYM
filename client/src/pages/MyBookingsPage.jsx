@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useGetMyBookingsQuery } from '../features/bookings/bookingsApi';
+import { useGetMyBookingsQuery, useCancelBookingMutation } from '../features/bookings/bookingsApi';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
@@ -7,9 +7,43 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useToast } from '../hooks/use-toast.js';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+  SheetTrigger,
+  SheetFooter,
+  SheetClose,
+} from '@/components/ui/sheet';
 
 function formatDate(d) {
-  try { return new Date(d).toLocaleDateString(); } catch { return '—'; }
+  try {
+    return new Date(d).toLocaleDateString();
+  } catch {
+    return '—';
+  }
+}
+function diffNights(a, b) {
+  try {
+    const ms = new Date(b) - new Date(a);
+    return Math.ceil(ms / (1000 * 60 * 60 * 24));
+  } catch {
+    return 0;
+  }
 }
 
 function StatusBadge({ status }) {
@@ -18,19 +52,26 @@ function StatusBadge({ status }) {
     pending: 'secondary',
     cancelled: 'destructive',
   };
-  return <Badge variant={map[status] ?? 'outline'} className="capitalize">{status ?? 'unknown'}</Badge>;
+  return (
+    <Badge variant={map[status] ?? 'outline'} className="capitalize">
+      {status ?? 'unknown'}
+    </Badge>
+  );
 }
 
 export default function MyBookingsPage() {
   const { data = [], isLoading, error, refetch, isFetching } = useGetMyBookingsQuery();
+  const [cancelBooking] = useCancelBookingMutation();
+  const { toast } = useToast();
+
   const [q, setQ] = useState('');
-  const [status, setStatus] = useState('all');      // all | confirmed | pending | cancelled
-  const [when, setWhen] = useState('upcoming');     // upcoming | past | all
+  const [status, setStatus] = useState('all'); // all | confirmed | pending | cancelled
+  const [when, setWhen] = useState('upcoming'); // upcoming | past | all
 
   const filtered = useMemo(() => {
     const now = Date.now();
     return [...(data || [])]
-      .filter(b => {
+      .filter((b) => {
         const title = (b.listing?.title || '').toLowerCase();
         if (q && !title.includes(q.toLowerCase())) return false;
         if (status !== 'all' && b.status !== status) return false;
@@ -42,10 +83,28 @@ export default function MyBookingsPage() {
       .sort((a, b) => new Date(b.start) - new Date(a.start));
   }, [data, q, status, when]);
 
+  const canCancel = (b) =>
+    b.status !== 'cancelled' && new Date(b.start) > new Date();
+
+  const handleCancel = async (b) => {
+    try {
+      await cancelBooking(b._id).unwrap();
+      toast({ title: 'Booking cancelled' });
+    } catch (e) {
+      toast({
+        variant: 'destructive',
+        title: 'Failed to cancel',
+        description: e?.data?.message || 'Try again.',
+      });
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="container py-6 grid gap-3">
-        {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-24 w-full" />)}
+        {Array.from({ length: 3 }).map((_, i) => (
+          <Skeleton key={i} className="h-24 w-full" />
+        ))}
       </div>
     );
   }
@@ -66,7 +125,12 @@ export default function MyBookingsPage() {
         <div className="flex flex-col gap-3 md:flex-row md:items-end">
           <div className="grid gap-1">
             <Label htmlFor="search">Search</Label>
-            <Input id="search" placeholder="Search by listing title…" value={q} onChange={(e) => setQ(e.target.value)} />
+            <Input
+              id="search"
+              placeholder="Search by listing title…"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+            />
           </div>
           <div className="grid gap-1">
             <Label>Status</Label>
@@ -107,22 +171,113 @@ export default function MyBookingsPage() {
         </Card>
       ) : (
         <div className="grid gap-3">
-          {filtered.map((b) => (
-            <Card key={b._id}>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <span>{b.listing?.title ?? 'Listing unavailable'}</span>
-                  <StatusBadge status={b.status} />
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="text-sm opacity-80">
-                  {formatDate(b.start)} → {formatDate(b.end)}
-                </div>
-                <div className="text-sm">Total: €{b.total ?? 0}</div>
-              </CardContent>
-            </Card>
-          ))}
+          {filtered.map((b) => {
+            const nights = diffNights(b.start, b.end);
+            const nightly = b.listing?.price ?? 0;
+            const subtotal = nights * nightly;
+            const total = b.total ?? subtotal;
+
+            return (
+              <Card key={b._id}>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <span>{b.listing?.title ?? 'Listing unavailable'}</span>
+                    <StatusBadge status={b.status} />
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className="text-sm opacity-80">
+                    {formatDate(b.start)} → {formatDate(b.end)} ({nights} night{nights === 1 ? '' : 's'})
+                  </div>
+                  <div className="text-sm mb-3">
+                    Total: €{total} {nightly ? <span className="opacity-70">({nights} × €{nightly})</span> : null}
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <Sheet>
+                      <SheetTrigger asChild>
+                        <Button size="sm" variant="secondary">View details</Button>
+                      </SheetTrigger>
+                      <SheetContent className="sm:max-w-md">
+                        <SheetHeader>
+                          <SheetTitle>{b.listing?.title ?? 'Booking details'}</SheetTitle>
+                          <SheetDescription>
+                            {formatDate(b.start)} → {formatDate(b.end)} ({nights} night{nights === 1 ? '' : 's'})
+                          </SheetDescription>
+                        </SheetHeader>
+
+                        <div className="mt-4 space-y-2 text-sm">
+                          <div className="flex justify-between">
+                            <span className="opacity-70">Location</span>
+                            <span>{b.listing?.location ?? '—'}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="opacity-70">Capacity</span>
+                            <span>{b.listing?.capacity ?? '—'}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="opacity-70">Nightly price</span>
+                            <span>€{nightly}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="opacity-70">Subtotal</span>
+                            <span>€{subtotal}</span>
+                          </div>
+                          <div className="flex justify-between font-medium pt-2 border-t">
+                            <span>Total</span>
+                            <span>€{total}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="opacity-70">Status</span>
+                            <span className="capitalize">{b.status}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="opacity-70">Booking ID</span>
+                            <span className="font-mono text-xs">{b._id}</span>
+                          </div>
+                        </div>
+
+                        <SheetFooter className="mt-6">
+                          <SheetClose asChild>
+                            <Button variant="outline">Close</Button>
+                          </SheetClose>
+                          {canCancel(b) && (
+                            <Button variant="destructive" onClick={() => handleCancel(b)}>
+                              Cancel booking
+                            </Button>
+                          )}
+                        </SheetFooter>
+                      </SheetContent>
+                    </Sheet>
+
+                    {canCancel(b) && (
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="destructive" size="sm">
+                            Cancel booking
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Cancel this booking?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              {b.listing?.title} — {formatDate(b.start)} → {formatDate(b.end)}
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Keep</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => handleCancel(b)}>
+                              Confirm
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>
