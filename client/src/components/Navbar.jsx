@@ -11,6 +11,7 @@ export default function Navbar() {
         <header className="border-b bg-background">
             <div className="container flex items-center gap-3 py-3">
                 <Link to="/" className="font-semibold">Bookings</Link>
+                <Link to="/classes" className="font-semibold">Classes</Link>
                 <nav className="ml-auto flex items-center gap-2">
                     {user ? (
                     <>

@@ -14,9 +14,13 @@ export const bookingsApi = api.injectEndpoints({
         cancelBooking: build.mutation({
             query: (id) => ({ url: `/bookings/${id}/cancel`, method: 'PATCH' }),
             invalidatesTags: ['Booking']
+        }),
+        createSessionBooking: build.mutation({
+            query: ({ sessionId }) => ({ url: `/session-bookings`, method: 'POST', body: { sessionId } }),
+            invalidatesTags: ['Booking','Session']
         })
     })
 });
 
 
-export const { useCreateBookingMutation, useGetMyBookingsQuery, useCancelBookingMutation } = bookingsApi;
+export const { useCreateBookingMutation, useGetMyBookingsQuery, useCancelBookingMutation, useCreateSessionBookingMutation } = bookingsApi;

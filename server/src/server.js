@@ -5,12 +5,15 @@ import { PORT, MONGO_URI, CLIENT_ORIGIN } from './config.js';
 import authRoutes from './routes/auth.routes.js';
 import listingsRoutes from './routes/listings.routes.js';
 import bookingsRoutes from './routes/bookings.routes.js';
-
+import classesRoutes from './routes/classes.routes.js';
+import sessionBookingsRoutes from './routes/sessionBookings.routes.js';
 
 const app = express();
 app.use(cors({ origin: CLIENT_ORIGIN, credentials: true }));
 app.use(express.json());
 
+app.use('/api/classes', classesRoutes);
+app.use('/api/session-bookings', sessionBookingsRoutes);
 
 app.get('/', (_, res) => res.json({ ok: true, service: 'booking-api' }));
 app.use('/api/auth', authRoutes);

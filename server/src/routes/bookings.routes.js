@@ -86,6 +86,7 @@ router.post('/', requireAuth, async (req, res) => {
 router.get('/me', requireAuth, async (req, res) => {
   const items = await Booking.find({ user: req.user.id })
     .populate('listing')
+    .populate({ path: 'session', populate: 'template' })
     .sort({ start: -1 });
   res.json(items);
 });
