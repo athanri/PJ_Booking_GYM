@@ -83,9 +83,8 @@ export default function MyBookingsPage() {
       .filter((b) => {
         // support both listing-based and session-based bookings
         const title =
-          (b.listing?.title ||
-            b.session?.template?.name ||
-            'Booking').toLowerCase();
+          (b.session?.template?.name ||
+            'Class').toLowerCase();
 
         if (q && !title.includes(q.toLowerCase())) return false;
         if (status !== 'all' && b.status !== status) return false;
@@ -205,8 +204,8 @@ export default function MyBookingsPage() {
         <div className="grid gap-3">
           {filtered.map((b) => {
             // title/price support both listing (stays) and session (classes)
-            const title = b.listing?.title || b.session?.template?.name || 'Booking';
-            const nightly = b.listing?.price ?? b.session?.price ?? 0;
+            const title = b.session?.template?.name || 'Booking';
+            const nightly = b.session?.price ?? 0;
             const nights = diffNights(b.start, b.end);
             const subtotal = nights * nightly;
             const total = b.total ?? subtotal;

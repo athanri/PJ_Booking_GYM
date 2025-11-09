@@ -3,11 +3,10 @@ import mongoose from 'mongoose';
 import cors from 'cors';
 import { PORT, MONGO_URI, CLIENT_ORIGIN } from './config.js';
 import authRoutes from './routes/auth.routes.js';
-import listingsRoutes from './routes/listings.routes.js';
-import bookingsRoutes from './routes/bookings.routes.js';
 import classesRoutes from './routes/classes.routes.js';
-import waitlistRoutes from './routes/waitlist.routes.js';
 import sessionBookingsRoutes from './routes/sessionBookings.routes.js';
+import bookingsRoutes from './routes/bookings.routes.js'; // me + cancel
+import waitlistRoutes from './routes/waitlist.routes.js';
 
 const app = express();
 app.use(cors({ origin: CLIENT_ORIGIN, credentials: true }));
@@ -18,7 +17,6 @@ app.use('/api/session-bookings', sessionBookingsRoutes);
 
 app.get('/', (_, res) => res.json({ ok: true, service: 'booking-api' }));
 app.use('/api/auth', authRoutes);
-app.use('/api/listings', listingsRoutes);
 app.use('/api/bookings', bookingsRoutes);
 app.use('/api/waitlist', waitlistRoutes);
 
